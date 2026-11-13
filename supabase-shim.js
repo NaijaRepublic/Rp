@@ -16,7 +16,12 @@
     if(!u) return null;
     var p = await sb.from("profiles").select("*").eq("id", u.id).maybeSingle();
     var prof = p.data || {};
-    return { name: prof.name || (u.user_metadata && u.user_metadata.name) || u.email, email: u.email, role: prof.is_admin ? "admin" : "member", seat: prof.is_admin ? 1 : null, id: u.id };
+    // Fallback: the owner email in config.js is always admin, even if the
+    // profiles RLS read returns empty (cached session / policy recursion).
+    // Real write protection still lives in Supabase RLS (is_admin()).
+    var isOwner = String(u.email||"").toLowerCase() === String(cfg.ADMIN_EMAIL||"").toLowerCase();
+    var isAdmin = !!(prof.is_admin || isOwner);
+    return { name: prof.name || (u.user_metadata && u.user_metadata.name) || u.email, email: u.email, role: isAdmin ? "admin" : "member", seat: isAdmin ? 1 : null, id: u.id };
   }
   async function sendEmail(subject, fields){
     try{ await sb.functions.invoke("send-email", { body: { subject: subject, fields: fields } }); }catch(e){ console.warn("email function failed", e); }
